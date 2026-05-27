@@ -73,7 +73,7 @@ The stress tests were executed simulating a highly competitive load of 2,000 con
    ```
 3. Enter the application directory and install the necessary dependencies:
    ```bash
-   cd app && npm install
+   npm install
    ```
 4. Start the Fastify server:
    ```bash

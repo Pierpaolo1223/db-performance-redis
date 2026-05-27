@@ -6,6 +6,9 @@ import { createClient } from "redis";
 
 const fastify = Fastify({ logger: false });
 
+const connectionString = `postgres://postgres:${process.env.DB_PASSWORD}@localhost:5433/transactions`;
+fastify.register(fastifyPostgres, { connectionString });
+
 const redisClient = createClient({ url: process.env.REDIS_URL });
 redisClient.on("error", (err) => console.error("Redis Client Error", err));
 await redisClient.connect();
@@ -71,9 +74,6 @@ fastify.get("/fast-stats", async (request, reply) => {
 
 const startServer = async () => {
   try {
-    const connectionString = `postgres://postgres:${process.env.DB_PASSWORD}@localhost:5433/transactions`;
-    fastify.register(fastifyPostgres, { connectionString });
-    
     await fastify.listen({ port: process.env.PORT || 3000 });
     console.log(
       `Fastify server loaded on http://localhost:${process.env.PORT || 3000}`,
