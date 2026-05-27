@@ -1,0 +1,54 @@
+services:
+  finance-db:
+    image: postgres:14.22
+    container_name: postgres_performance_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=transactions
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./scripts:/docker-entrypoint-initdb.d 
+      - performance_postgres_data:/var/lib/postgresql/data 
+    command: >
+     postgres 
+      -c shared_buffers=512MB 
+      -c work_mem=64MB
+      -c max_wal_size=2GB 
+      -c min_wal_size=80MB
+      -c log_statement=none
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transactions"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  cache-db:
+    image: redis:7.2-alpine
+    container_name: redis_performance_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - performance_redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: performance_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    depends_on:
+      - finance-db
+
+volumes:
+  performance_postgres_data:
+  performance_redis_data:
