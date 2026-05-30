@@ -1,6 +1,6 @@
 # High-Performance Metrics Aggregation: PostgreSQL vs Redis Cache
 
-This repository demonstrates how to scale massive aggregation and complex data processing queries over an enterprise financial database containing 40 million records. The objective of this benchmark is to analyze the performance degradation of a relational database (PostgreSQL) under heavy stress testing and to demonstrate the mitigation of latency through an in-memory caching strategy (Redis) using the Cache-Aside pattern and Named Prepared Statements.
+This repository demonstrates how to scale massive aggregation and complex data processing queries over an enterprise financial database containing 20 million records. The objective of this benchmark is to analyze the performance degradation of a relational database (PostgreSQL) under heavy stress testing and to demonstrate the mitigation of latency through an in-memory caching strategy (Redis) using the Cache-Aside pattern and Named Prepared Statements.
 
 ## System Architecture and Use Cases
 
