@@ -6,7 +6,7 @@ import { createClient } from "redis";
 
 const fastify = Fastify({ logger: false });
 
-const connectionString = `postgres://postgres:${process.env.DB_PASSWORD}@localhost:5433/transactions`;
+const connectionString = `postgres://postgres:postgres@localhost:5433/transactions`;
 fastify.register(fastifyPostgres, { connectionString });
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
