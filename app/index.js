@@ -56,7 +56,7 @@ fastify.get("/slow-stats", async (request, reply) => {
     if (rows.length === 0) {
       return {
         source: "PostgreSQL (Prepared Statement)",
-        total_transactions: 0,
+        total_transactions: "0",
         execution_time_ms: parseFloat((performance.now() - start).toFixed(2)),
         warning: "Query returned no rows",
       };
@@ -66,7 +66,7 @@ fastify.get("/slow-stats", async (request, reply) => {
     if (rawTotal === null || rawTotal === undefined || rawTotal === "") {
       return {
         source: "PostgreSQL (Prepared Statement)",
-        total_transactions: 0,
+        total_transactions: "0",
         execution_time_ms: parseFloat((performance.now() - start).toFixed(2)),
         warning: "Query returned null or empty total",
       };
@@ -75,7 +75,7 @@ fastify.get("/slow-stats", async (request, reply) => {
     const duration = performance.now() - start;
     return {
       source: "PostgreSQL (Prepared Statement)",
-      total_transactions: parseInt(rawTotal, 10),
+      total_transactions: BigInt(rows[0].total).toString(),
       execution_time_ms: parseFloat(duration.toFixed(2)),
     };
   } catch (err) {
@@ -84,17 +84,23 @@ fastify.get("/slow-stats", async (request, reply) => {
 });
 
 fastify.get("/fast-stats", async (request, reply) => {
-  try {
+   try {
     const redisStart = performance.now();
     const cachedValue = await redisClient.get(CACHE_KEY);
 
     if (cachedValue !== null && cachedValue !== "") {
-      const duration = performance.now() - redisStart;
-      return {
-        source: "Redis (Cache Hit)",
-        total_transactions: parseInt(String(cachedValue), 10),
-        execution_time_ms: parseFloat(Math.max(0.01, duration).toFixed(2)),
-      };
+      try {
+        const parsedValue = BigInt(String(cachedValue));
+        const duration = performance.now() - redisStart;
+        return {
+          source: "Redis (Cache Hit)",
+          total_transactions: parsedValue.toString(),
+          execution_time_ms: parseFloat(Math.max(0.01, duration).toFixed(2)),
+        };
+      } catch (parseError) {
+        // Se il valore non è valido, continua con la logica di cache miss
+        console.log("[CACHE] Invalid value detected, falling back to DB:", cachedValue);
+      }
     }
 
     if (inFlightRequests.has(CACHE_KEY)) {
@@ -168,3 +174,5 @@ const startServer = async () => {
 };
 
 startServer();
+
+
