@@ -1,25 +1,35 @@
 {
-  "name": "app",
+  "name": "finance-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "API per transazioni finanziarie con caching Redis",
   "main": "index.js",
-  "scripts": {
-    "start": "node app/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "scripts": {
+
+
+
+
+    "start": "node app/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
   "dependencies": {
+
+
+
     "@fastify/postgres": "^6.0.2",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
+    "pg": "^8.0.0",
+
     "redis": "^5.12.1"
   },
   "devDependencies": {
-    "@jest/globals": "^30.4.1",
+
+    "@jest/globals": "^30.2.2",
     "autocannon": "^8.0.0",
-    "jest": "^30.4.2"
+    "jest": "^30.2.2"
   }
 }
