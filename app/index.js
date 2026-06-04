@@ -1,4 +1,4 @@
-import "dotenv/config"; 
+import "dotenv/config";
 
 import Fastify from "fastify";
 import fastifyPostgres from "@fastify/postgres";
@@ -26,15 +26,56 @@ const PREPARED_QUERY = {
 
 const CACHE_KEY = "stats:2026-10:99_cents";
 
+const inFlightRequests = new Map();
+
+// Cleanup automatico delle entry più vecchie di 30s per prevenire memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of inFlightRequests) {
+    if (now - entry.timestamp > 30000) {
+      inFlightRequests.delete(key);
+    }
+  }
+}, 5000);
+
+process.on("exit", () => inFlightRequests.clear());
+process.on("SIGINT", () => {
+  inFlightRequests.clear();
+  process.exit();
+});
+process.on("SIGTERM", () => {
+  inFlightRequests.clear();
+  process.exit();
+});
+
 fastify.get("/slow-stats", async (request, reply) => {
   const start = performance.now();
   try {
     const { rows } = await fastify.pg.query(PREPARED_QUERY);
-    const duration = performance.now() - start;
 
+    if (rows.length === 0) {
+      return {
+        source: "PostgreSQL (Prepared Statement)",
+        total_transactions: 0,
+        execution_time_ms: parseFloat((performance.now() - start).toFixed(2)),
+        warning: "Query returned no rows",
+      };
+    }
+
+    const rawTotal = rows[0].total;
+    if (rawTotal === null || rawTotal === undefined || rawTotal === "") {
+      return {
+        source: "PostgreSQL (Prepared Statement)",
+        total_transactions: 0,
+        execution_time_ms: parseFloat((performance.now() - start).toFixed(2)),
+        warning: "Query returned null or empty total",
+      };
+    }
+
+    const duration = performance.now() - start;
     return {
       source: "PostgreSQL (Prepared Statement)",
-      total_transactions: parseInt(rows[0].total, 10),
+      total_transactions: parseInt(rawTotal, 10),
       execution_time_ms: parseFloat(duration.toFixed(2)),
     };
   } catch (err) {
@@ -43,30 +84,72 @@ fastify.get("/slow-stats", async (request, reply) => {
 });
 
 fastify.get("/fast-stats", async (request, reply) => {
-  const start = performance.now();
   try {
+    const redisStart = performance.now();
     const cachedValue = await redisClient.get(CACHE_KEY);
 
-    if (cachedValue !== null) {
-      const duration = performance.now() - start;
+    if (cachedValue !== null && cachedValue !== "") {
+      const duration = performance.now() - redisStart;
       return {
         source: "Redis (Cache Hit)",
-        total_transactions: parseInt(cachedValue, 10),
-        execution_time_ms: parseFloat(duration.toFixed(2)),
+        total_transactions: parseInt(String(cachedValue), 10),
+        execution_time_ms: parseFloat(Math.max(0.01, duration).toFixed(2)),
       };
     }
 
-    const { rows } = await fastify.pg.query(PREPARED_QUERY);
-    const total = rows[0].total;
+    if (inFlightRequests.has(CACHE_KEY)) {
+      const result = await inFlightRequests.get(CACHE_KEY).promise;
+      result.source = "Redis (Cache Hit - Deduplicated)";
+      return result;
+    }
+    const start = performance.now();
+    const promise = (async () => {
+      try {
+        const { rows } = await fastify.pg.query(PREPARED_QUERY);
 
-    await redisClient.setEx(CACHE_KEY, 3600, total);
+        if (rows.length === 0) {
+          const duration = performance.now() - start;
+          return {
+            source: "PostgreSQL (Cache Miss + Prepared Statement)",
+            total_transactions: 0,
+            execution_time_ms: parseFloat(duration.toFixed(2)),
+            warning: "Query returned no rows",
+          };
+        }
 
-    const duration = performance.now() - start;
-    return {
-      source: "PostgreSQL (Cache Miss + Prepared Statement)",
-      total_transactions: parseInt(total, 10),
-      execution_time_ms: parseFloat(duration.toFixed(2)),
-    };
+        const rawTotal = rows[0].total;
+        if (rawTotal === null || rawTotal === undefined || rawTotal === "") {
+          const duration = performance.now() - start;
+          return {
+            source: "PostgreSQL (Cache Miss + Prepared Statement)",
+            total_transactions: 0,
+            execution_time_ms: parseFloat(duration.toFixed(2)),
+            warning: "Query returned null or empty total",
+          };
+        }
+
+        const total = rawTotal;
+
+        try {
+          await redisClient.setEx(CACHE_KEY, 3600, total);
+        } catch (cacheErr) {
+          console.error("[CACHE WRITE ERROR] setEx failed:", cacheErr.message);
+        }
+
+        const duration = performance.now() - start;
+        return {
+          source: "PostgreSQL (Cache Miss + Prepared Statement)",
+          total_transactions: parseInt(total, 10),
+          execution_time_ms: parseFloat(duration.toFixed(2)),
+        };
+      } finally {
+        inFlightRequests.delete(CACHE_KEY);
+      }
+    })();
+
+    inFlightRequests.set(CACHE_KEY, { promise, timestamp: Date.now() });
+    const result = await promise;
+    return result;
   } catch (err) {
     reply.status(500).send({ error: err.message });
   }
